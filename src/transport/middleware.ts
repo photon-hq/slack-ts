@@ -6,6 +6,10 @@
  * boundary, so it stamps the right `team_id` metadata on every call without
  * any per-request plumbing. For unary calls it also retries exactly once on
  * UNAUTHENTICATED after invalidating the token cache.
+ *
+ * Retry middleware auto-retries unary calls on transient transport failures
+ * (`UNAVAILABLE`, `DEADLINE_EXCEEDED`) and on the server-opt-in
+ * `x-retryable: true` trailer. Typed server errors are never retried.
  */
 
 import {
@@ -68,9 +72,29 @@ export function authMiddleware(
 }
 
 // ---------------------------------------------------------------------------
-// Retry (unary only, gated on `x-retryable` trailing metadata)
+// Retry (unary only)
 // ---------------------------------------------------------------------------
 
+/**
+ * Retries unary calls under two conditions:
+ *
+ *   1. Transient transport failures: gRPC `UNAVAILABLE` (14) and
+ *      `DEADLINE_EXCEEDED` (4). These are canonically retriable per the gRPC
+ *      ecosystem convention and are typically returned by an intermediate
+ *      proxy / load balancer before the request ever reaches the service
+ *      handler. Without this, an upstream rate-limit or transient hiccup
+ *      surfaces as `ConnectionError: unavailable` even though the next
+ *      attempt would have produced a typed answer.
+ *
+ *   2. Server opt-in via the `x-retryable: true` trailing metadata. Reserved
+ *      for typed errors the server explicitly marks as safe to retry.
+ *      spectrum-slack does not currently emit this trailer, so this path is
+ *      effectively dormant until the server opts in.
+ *
+ * Typed server errors (`INVALID_ARGUMENT`, `PERMISSION_DENIED`, `NOT_FOUND`,
+ * `INTERNAL`, `UNAUTHENTICATED`, `FAILED_PRECONDITION`, `RESOURCE_EXHAUSTED`)
+ * are *not* retried — they're the server's actual answer.
+ */
 export function retryMiddleware(opts: RetryOptions = {}): ClientMiddleware {
   const maxAttempts = Math.max(
     1,
@@ -92,7 +116,13 @@ export function retryMiddleware(opts: RetryOptions = {}): ClientMiddleware {
       } catch (error: unknown) {
         lastError = error;
 
-        const retryable = readMetadataValue(error, "x-retryable") === "true";
+        const isTransientGrpc =
+          error instanceof ClientError &&
+          (error.code === Status.UNAVAILABLE ||
+            error.code === Status.DEADLINE_EXCEEDED);
+        const serverOptedIn =
+          readMetadataValue(error, "x-retryable") === "true";
+        const retryable = isTransientGrpc || serverOptedIn;
 
         if (!retryable || attempt >= maxAttempts - 1) {
           throw error;

@@ -13,6 +13,11 @@
  * | INVALID_ARGUMENT, FAILED_PRECONDITION  | ValidationError      |
  * | UNAVAILABLE, DEADLINE_EXCEEDED         | ConnectionError      |
  * | Everything else                        | SlackError (base)    |
+ *
+ * Note: `UNAVAILABLE` and `DEADLINE_EXCEEDED` are auto-retried by
+ * `retryMiddleware` (`src/transport/middleware.ts`) before reaching this
+ * mapping; a `ConnectionError` thrown to the caller therefore reflects a
+ * sustained transport failure across all retry attempts.
  */
 
 import { ClientError, Status } from "nice-grpc-common";
