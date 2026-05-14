@@ -32,7 +32,12 @@ export function header(text: string): unknown {
 }
 
 export function context(...elements: readonly unknown[]): unknown {
-  return { type: "context", elements };
+  return {
+    type: "context",
+    elements: elements.map((e) =>
+      typeof e === "string" ? { type: "mrkdwn", text: e } : e
+    ),
+  };
 }
 
 export function actions(...elements: readonly unknown[]): unknown {

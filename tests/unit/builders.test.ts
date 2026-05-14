@@ -87,6 +87,18 @@ describe("Block Kit builders", () => {
     });
   });
 
+  it("context() coerces bare strings to mrkdwn elements", () => {
+    expect(
+      context("rendered via context()", { type: "plain_text", text: "p" })
+    ).toEqual({
+      type: "context",
+      elements: [
+        { type: "mrkdwn", text: "rendered via context()" },
+        { type: "plain_text", text: "p" },
+      ],
+    });
+  });
+
   it("actions() with elements", () => {
     expect(actions({ type: "button" })).toEqual({
       type: "actions",
