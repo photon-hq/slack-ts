@@ -71,6 +71,11 @@ export class SpectrumCloudTokenProvider implements TokenProvider {
   private cache: CacheEntry | null = null;
   private inflight: Promise<CacheEntry> | null = null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  // Bumped by every `invalidate`. A mint captures the generation before its
+  // HTTP request and refuses to commit its result if the generation advanced
+  // mid-flight — otherwise a background refresh could resurrect a token the
+  // caller just invalidated.
+  private generation = 0;
 
   constructor(options: SpectrumCloudTokenProviderOptions) {
     this.projectId = options.projectId;
@@ -100,6 +105,7 @@ export class SpectrumCloudTokenProvider implements TokenProvider {
   }
 
   invalidate(_teamId: string): void {
+    this.generation++;
     this.cache = null;
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
@@ -121,19 +127,24 @@ export class SpectrumCloudTokenProvider implements TokenProvider {
   }
 
   private async ensureFresh(): Promise<CacheEntry> {
-    const now = Date.now();
-    if (this.cache && now < this.cache.expiresAt - REFRESH_LEAD_MS) {
-      return this.cache;
+    // Loop: a concurrent invalidate() during mint() can cause that mint to
+    // refuse to commit (generation mismatch), in which case we re-mint.
+    for (;;) {
+      const now = Date.now();
+      if (this.cache && now < this.cache.expiresAt - REFRESH_LEAD_MS) {
+        return this.cache;
+      }
+      if (!this.inflight) {
+        this.inflight = this.mint().finally(() => {
+          this.inflight = null;
+        });
+      }
+      await this.inflight;
     }
-    if (!this.inflight) {
-      this.inflight = this.mint().finally(() => {
-        this.inflight = null;
-      });
-    }
-    return this.inflight;
   }
 
   private async mint(): Promise<CacheEntry> {
+    const startGeneration = this.generation;
     const url = `${this.endpoint}/projects/${encodeURIComponent(this.projectId)}/slack/tokens`;
     const auth = base64BasicAuth(this.projectId, this.projectSecret);
 
@@ -178,8 +189,13 @@ export class SpectrumCloudTokenProvider implements TokenProvider {
 
     const expiresAt = Date.now() + body.data.expiresIn * 1000;
     const entry: CacheEntry = { tokens, teams, expiresAt };
-    this.cache = entry;
-    this.scheduleRefresh(expiresAt);
+
+    if (startGeneration === this.generation) {
+      this.cache = entry;
+      this.scheduleRefresh(expiresAt);
+    }
+    // If generation advanced mid-flight, the caller invalidated; discard this
+    // result silently. ensureFresh() will loop and re-mint.
     return entry;
   }
 

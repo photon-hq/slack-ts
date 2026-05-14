@@ -110,4 +110,60 @@ describe("withResumableReconnect", () => {
     expect(errors).toHaveLength(1);
     expect((errors[0] as Error).message).toBe("first");
   });
+
+  it("preserves live events emitted during a slow gap-fill on reconnect", async () => {
+    // First connect: yields 1, then throws to trigger reconnect.
+    // Second connect: yields 10, 11, 12 (no throw). These live events start
+    // arriving *while* the gap-fill is still in flight, so the parallel
+    // implementation must buffer them and emit them after gap-fill drains.
+    let createCount = 0;
+    let cursor = "c0";
+
+    // Wires from inside the stream so the test can observe when the live
+    // stream actually started producing.
+    let liveResolverArmed = false;
+    let liveStarted!: () => void;
+    const liveProducingNow = new Promise<void>((resolve) => {
+      liveStarted = resolve;
+      liveResolverArmed = true;
+    });
+    expect(liveResolverArmed).toBe(true);
+
+    const stream = withResumableReconnect<number>(
+      async function* createStream() {
+        createCount++;
+        if (createCount === 1) {
+          yield 1;
+          cursor = "c1";
+          throw new Error("boom");
+        }
+        liveStarted();
+        yield 10;
+        yield 11;
+        yield 12;
+      },
+      async () => {
+        // Sleep longer than the live stream needs to produce its events.
+        // The live stream is opened *before* gap-fill awaits, so events
+        // [10, 11, 12] should be queued during this delay.
+        await liveProducingNow;
+        await new Promise((r) => setTimeout(r, 10));
+        return [2, 3];
+      },
+      () => cursor,
+      { initialDelay: 1, maxAttempts: 2 }
+    );
+
+    const result: number[] = [];
+    for await (const v of stream) {
+      result.push(v);
+      if (result.length >= 6) {
+        break;
+      }
+    }
+    // Order: first-connect events first, then gap-fill events (drained before
+    // live), then live events buffered during gap-fill.
+    expect(result).toEqual([1, 2, 3, 10, 11, 12]);
+    expect(createCount).toBe(2);
+  });
 });

@@ -79,22 +79,96 @@ async function backoff(
   return true;
 }
 
-async function* gapFill<T>(
+/**
+ * Run gap-fill and the live stream in parallel on reconnect: open the live
+ * stream immediately so the server starts queuing fresh events, drain
+ * `fetchMissed(cursor)` in full first, then yield anything the live stream
+ * buffered during gap-fill, then keep yielding live until the stream ends or
+ * errors. Per `PROTOCOL.md §reconnect`, the recommended SDK behavior is to
+ * run these two in parallel.
+ */
+async function* reconnectWithParallelGapFill<T>(
+  createStream: () => AsyncIterable<T>,
   fetchMissed: (cursor: string) => Promise<T[]>,
-  getCursor: () => string | undefined
+  getCursor: () => string | undefined,
+  state: BackoffState,
+  opts: ResolvedOptions
 ): AsyncGenerator<T> {
-  const cursor = getCursor();
-  if (!cursor) {
-    return;
-  }
+  // Open the live stream first so the underlying gRPC call is in flight while
+  // gap-fill runs. Events arriving before we start yielding live get buffered
+  // by the pump below.
+  const liveIterator = createStream()[Symbol.asyncIterator]();
+  const liveBuffer: T[] = [];
+  let liveDone = false;
+  let liveError: unknown;
+  let wake: (() => void) | undefined;
+
+  const pump = (async () => {
+    try {
+      for (;;) {
+        const r = await liveIterator.next();
+        if (r.done) {
+          break;
+        }
+        liveBuffer.push(r.value);
+        wake?.();
+      }
+    } catch (err) {
+      liveError = err;
+    } finally {
+      liveDone = true;
+      wake?.();
+    }
+  })();
+
+  const markReceived = (): void => {
+    state.consecutiveFailures = 0;
+    state.delay = opts.initialDelay;
+  };
 
   try {
-    const missed = await fetchMissed(cursor);
-    for (const event of missed) {
-      yield event;
+    // 1. Drain gap-fill (silently no-op on cursor==undefined or fetch failure).
+    const cursor = getCursor();
+    if (cursor) {
+      try {
+        const missed = await fetchMissed(cursor);
+        for (const event of missed) {
+          markReceived();
+          yield event;
+        }
+      } catch {
+        // Gap-fill failed — fall through to live.
+      }
     }
-  } catch {
-    // Gap-fill failed — continue with live stream anyway.
+
+    // 2. Drain whatever the live stream buffered during gap-fill, then keep
+    //    pulling live until done or error.
+    for (;;) {
+      if (liveBuffer.length > 0) {
+        markReceived();
+        // biome-ignore lint/style/noNonNullAssertion: length checked above
+        yield liveBuffer.shift()!;
+        continue;
+      }
+      if (liveError) {
+        throw liveError;
+      }
+      if (liveDone) {
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+      wake = undefined;
+    }
+  } finally {
+    // Ensure the pump promise settles so it can't dangle past the iterator.
+    await liveIterator.return?.(undefined).catch(() => {
+      // ignore
+    });
+    await pump.catch(() => {
+      // already captured into liveError
+    });
   }
 }
 
@@ -114,16 +188,21 @@ export function withResumableReconnect<T>(
       delay: opts.initialDelay,
     };
     let isFirstConnect = true;
-    const stopped = false;
 
-    while (!stopped) {
+    for (;;) {
       try {
-        if (!isFirstConnect) {
-          yield* gapFill(fetchMissed, getCursor);
+        if (isFirstConnect) {
+          isFirstConnect = false;
+          yield* consumeStream(createStream(), state, opts);
+        } else {
+          yield* reconnectWithParallelGapFill(
+            createStream,
+            fetchMissed,
+            getCursor,
+            state,
+            opts
+          );
         }
-
-        isFirstConnect = false;
-        yield* consumeStream(createStream(), state, opts);
       } catch (err) {
         onError?.(err);
         if (shouldStop?.(err)) {

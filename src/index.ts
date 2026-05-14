@@ -28,6 +28,7 @@ export {
   type PermissionKind,
   RateLimitError,
   SlackError,
+  ValidationError,
 } from "./errors/slack-error";
 
 // Resources (type-only — instances accessed via client.team())

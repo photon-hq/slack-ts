@@ -15,8 +15,10 @@ export class FilesResource {
     params: UploadOptions,
     options?: RequestOptions
   ): Promise<UploadResult> {
+    // coerceContent throws synchronously on bad input; surface that directly
+    // rather than laundering a client-side TypeError through fromGrpcError.
+    const content = coerceContent(params.content);
     try {
-      const content = coerceContent(params.content);
       const response = await this._client.upload(
         {
           channel: params.channel,
@@ -65,6 +67,7 @@ function coerceContent(
   if (typeof input === "string") {
     return new TextEncoder().encode(input);
   }
-  // Unreachable, but keep TypeScript happy.
-  return new Uint8Array(0);
+  throw new TypeError(
+    `files.upload: unsupported content type ${typeof input}; expected Uint8Array | Buffer | ArrayBuffer | string`
+  );
 }

@@ -70,7 +70,7 @@ export class EventsResource {
       await initial();
 
       const stream = withResumableReconnect<SlackEvent>(
-        () => mapLiveStream(client.subscribeEvents({}), teamId, advanceCursor),
+        () => mapLiveStream(client.subscribeEvents({}), teamId),
         (cursor) => fetchAllMissed(client, teamId, cursor),
         () => lastCursor,
         {
@@ -119,15 +119,10 @@ export class EventsResource {
 
 async function* mapLiveStream(
   rpcStream: AsyncIterable<SubscribeEventsResponse>,
-  teamId: string,
-  advanceCursor: (cursor: string) => void
+  teamId: string
 ): AsyncGenerator<SlackEvent> {
   try {
     for await (const proto of rpcStream) {
-      const c = proto.cursor?.opaque;
-      if (typeof c === "string" && c.length > 0) {
-        advanceCursor(c);
-      }
       const ev = mapEvent(proto, teamId);
       if (ev) {
         yield ev;
@@ -140,7 +135,11 @@ async function* mapLiveStream(
 
 const GAP_FILL_PAGE_SIZE = 200;
 
-async function fetchAllMissed(
+/**
+ * Page through `FetchMissedEvents` from `startCursor` until the server reports
+ * `hasMore: false` or returns an empty page. Exported for unit testing.
+ */
+export async function fetchAllMissed(
   client: MessageServiceClient,
   teamId: string,
   startCursor: string

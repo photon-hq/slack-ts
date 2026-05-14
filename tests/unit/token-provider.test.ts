@@ -226,6 +226,57 @@ describe("SpectrumCloudTokenProvider", () => {
     );
     provider.close();
   });
+
+  it("invalidate() during an in-flight mint forces a re-mint", async () => {
+    // Two mints, distinguishable by the token value, so we can assert which
+    // one ended up in the cache.
+    let calls = 0;
+    const responses = [
+      { ...mintBody, data: { ...mintBody.data, auth: { T1: "jwt-A" } } },
+      { ...mintBody, data: { ...mintBody.data, auth: { T1: "jwt-B" } } },
+    ];
+
+    // Gate the first fetch so we can interleave invalidate() before it
+    // resolves.
+    let releaseFirst: () => void = () => {
+      // assigned below
+    };
+    const firstReleased = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const provider = new SpectrumCloudTokenProvider({
+      projectId: "p",
+      projectSecret: "s",
+      endpoint: "http://cloud",
+      fetch: async () => {
+        const i = calls++;
+        if (i === 0) {
+          await firstReleased;
+        }
+        return mockOkResponse(responses[i]);
+      },
+    });
+
+    // Kick off the first mint but don't await yet.
+    const first = provider.getAccessToken("T1");
+    // Yield once so ensureFresh has actually started the fetch.
+    await Promise.resolve();
+
+    // Invalidate while the first mint is still in flight.
+    provider.invalidate("T1");
+
+    // Let the first fetch resolve. Per the generation guard, its result
+    // must NOT be written to cache.
+    releaseFirst();
+
+    // The first getAccessToken call will loop and re-mint, ending with jwt-B.
+    expect(await first).toBe("jwt-B");
+    // Subsequent calls hit the cache (jwt-B), no further fetches.
+    expect(await provider.getAccessToken("T1")).toBe("jwt-B");
+    expect(calls).toBe(2);
+    provider.close();
+  });
 });
 
 describe("staticTokens", () => {
