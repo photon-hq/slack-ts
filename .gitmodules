@@ -1,0 +1,5 @@
+[submodule "proto"]
+	path = proto
+	url = https://github.com/photon-hq/spectrum-slack-buf.git
+	branch = main
+	update = merge
