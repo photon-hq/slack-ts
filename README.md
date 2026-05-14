@@ -150,6 +150,10 @@ try {
 `PermissionError.permission` is a typed discriminated union covering
 `feature_not_enabled`, `platform_disabled`, `team_not_owned`, and `other`.
 
+Feature-gated RPCs today: `files.upload` / `files.getUrl` (feature `files`),
+reactions via `messages.send({ reaction })` (feature `reactions`), and
+`messages.markRead` (feature `read-tracking`).
+
 ## Custom token provider
 
 The SDK ships with `SpectrumCloudTokenProvider` (default, used when you pass

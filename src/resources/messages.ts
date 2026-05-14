@@ -26,6 +26,12 @@ export class MessagesResource {
     }
   }
 
+  /**
+   * Mark the channel as read up to the given message timestamp. Gated on the
+   * `read-tracking` project feature: if not enabled, throws `PermissionError`
+   * with `permission.kind === "feature_not_enabled"` and
+   * `permission.feature === "read-tracking"`.
+   */
   async markRead(
     params: { readonly channel: string; readonly ts: string },
     options?: RequestOptions

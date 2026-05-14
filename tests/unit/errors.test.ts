@@ -107,6 +107,10 @@ describe("parsePermissionKind", () => {
       kind: "feature_not_enabled",
       feature: "files",
     });
+    expect(parsePermissionKind("feature_not_enabled:read-tracking")).toEqual({
+      kind: "feature_not_enabled",
+      feature: "read-tracking",
+    });
   });
   it("parses team_id not owned", () => {
     expect(parsePermissionKind("team_id not owned by sub")).toEqual({
