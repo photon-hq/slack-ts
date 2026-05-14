@@ -77,14 +77,18 @@ async function consume<Res>(
 describe("retryMiddleware", () => {
   const fastOpts = { maxAttempts: 4, initialDelay: 1, maxDelay: 1 };
 
-  it("retries UNAVAILABLE up to maxAttempts then rethrows the original ClientError", async () => {
+  // Regression guard: auto-retrying UNAVAILABLE without server cooperation
+  // caused duplicate writes (the response can be lost *after* the handler
+  // already touched Slack — replay then double-executes non-idempotent ops
+  // like chat.postMessage / reactions.add). The SDK only retries when the
+  // server explicitly opts in via x-retryable: true.
+  it("does NOT auto-retry UNAVAILABLE without x-retryable: true", async () => {
     const counter = { count: 0 };
     const call = makeUnaryCall<string>(
       [
         new ClientError("/x", Status.UNAVAILABLE, "unavailable"),
-        new ClientError("/x", Status.UNAVAILABLE, "unavailable"),
-        new ClientError("/x", Status.UNAVAILABLE, "unavailable"),
-        new ClientError("/x", Status.UNAVAILABLE, "unavailable"),
+        // sentinel — must never be reached
+        "should-not-reach",
       ],
       counter
     );
@@ -97,27 +101,15 @@ describe("retryMiddleware", () => {
     }
     expect(caught).toBeInstanceOf(ClientError);
     expect((caught as ClientError).code).toBe(Status.UNAVAILABLE);
-    expect(counter.count).toBe(4);
+    expect(counter.count).toBe(1);
   });
 
-  it("UNAVAILABLE followed by OK returns the OK response", async () => {
-    const counter = { count: 0 };
-    const call = makeUnaryCall<string>(
-      [new ClientError("/x", Status.UNAVAILABLE, "unavailable"), "hello"],
-      counter
-    );
-    const mw = retryMiddleware(fastOpts);
-    const result = await consume(mw, call);
-    expect(result).toBe("hello");
-    expect(counter.count).toBe(2);
-  });
-
-  it("UNAVAILABLE followed by INVALID_ARGUMENT rethrows the typed error", async () => {
+  it("does NOT auto-retry DEADLINE_EXCEEDED without x-retryable: true", async () => {
     const counter = { count: 0 };
     const call = makeUnaryCall<string>(
       [
-        new ClientError("/x", Status.UNAVAILABLE, "unavailable"),
-        new ClientError("/x", Status.INVALID_ARGUMENT, "invalid_blocks"),
+        new ClientError("/x", Status.DEADLINE_EXCEEDED, "slow"),
+        "should-not-reach",
       ],
       counter
     );
@@ -129,9 +121,8 @@ describe("retryMiddleware", () => {
       caught = e;
     }
     expect(caught).toBeInstanceOf(ClientError);
-    expect((caught as ClientError).code).toBe(Status.INVALID_ARGUMENT);
-    expect((caught as ClientError).details).toBe("invalid_blocks");
-    expect(counter.count).toBe(2);
+    expect((caught as ClientError).code).toBe(Status.DEADLINE_EXCEEDED);
+    expect(counter.count).toBe(1);
   });
 
   it("does not retry typed errors — INVALID_ARGUMENT short-circuits on the first attempt", async () => {
@@ -139,7 +130,6 @@ describe("retryMiddleware", () => {
     const call = makeUnaryCall<string>(
       [
         new ClientError("/x", Status.INVALID_ARGUMENT, "bad"),
-        // sentinel — must never be reached
         "should-not-reach",
       ],
       counter
@@ -156,10 +146,15 @@ describe("retryMiddleware", () => {
     expect(counter.count).toBe(1);
   });
 
-  it("retries DEADLINE_EXCEEDED", async () => {
+  it("retries when server attaches x-retryable: true (rate-limiter-style rejection)", async () => {
     const counter = { count: 0 };
     const call = makeUnaryCall<string>(
-      [new ClientError("/x", Status.DEADLINE_EXCEEDED, "slow"), "ok"],
+      [
+        clientErrorWithMetadata(Status.UNAVAILABLE, "rate-limited", {
+          "x-retryable": "true",
+        }),
+        "ok",
+      ],
       counter
     );
     const mw = retryMiddleware(fastOpts);
@@ -168,7 +163,38 @@ describe("retryMiddleware", () => {
     expect(counter.count).toBe(2);
   });
 
-  it("server-set x-retryable: true triggers retry on otherwise-non-retriable codes (regression guard for opt-in path)", async () => {
+  it("retries x-retryable: true up to maxAttempts then rethrows the original ClientError", async () => {
+    const counter = { count: 0 };
+    const call = makeUnaryCall<string>(
+      [
+        clientErrorWithMetadata(Status.UNAVAILABLE, "rate-limited", {
+          "x-retryable": "true",
+        }),
+        clientErrorWithMetadata(Status.UNAVAILABLE, "rate-limited", {
+          "x-retryable": "true",
+        }),
+        clientErrorWithMetadata(Status.UNAVAILABLE, "rate-limited", {
+          "x-retryable": "true",
+        }),
+        clientErrorWithMetadata(Status.UNAVAILABLE, "rate-limited", {
+          "x-retryable": "true",
+        }),
+      ],
+      counter
+    );
+    const mw = retryMiddleware(fastOpts);
+    let caught: unknown;
+    try {
+      await consume(mw, call);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ClientError);
+    expect((caught as ClientError).code).toBe(Status.UNAVAILABLE);
+    expect(counter.count).toBe(4);
+  });
+
+  it("server-set x-retryable: true triggers retry on otherwise-non-retriable codes", async () => {
     const counter = { count: 0 };
     const call = makeUnaryCall<string>(
       [
@@ -191,8 +217,9 @@ describe("retryMiddleware", () => {
     ac.abort();
     const call = makeUnaryCall<string>(
       [
-        new ClientError("/x", Status.UNAVAILABLE, "unavailable"),
-        // sentinel — must never be reached because we abort before retry
+        clientErrorWithMetadata(Status.UNAVAILABLE, "rate-limited", {
+          "x-retryable": "true",
+        }),
         "should-not-reach",
       ],
       counter
