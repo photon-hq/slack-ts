@@ -156,6 +156,7 @@ export async function fetchAllMissed(
     } catch (err) {
       throw fromGrpcError(err);
     }
+    const cursorBeforePage = next;
     for (const proto of r.events) {
       const c = proto.cursor?.opaque;
       if (typeof c === "string" && c.length > 0) {
@@ -167,6 +168,12 @@ export async function fetchAllMissed(
       }
     }
     if (!r.hasMore || r.events.length === 0) {
+      break;
+    }
+    // Defensive: if a page reports `hasMore` but none of its events advanced
+    // the cursor (server bug, or every event had an empty opaque field),
+    // bail rather than loop forever on the same page.
+    if (next === cursorBeforePage) {
       break;
     }
   }

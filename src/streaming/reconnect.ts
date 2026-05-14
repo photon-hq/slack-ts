@@ -127,17 +127,18 @@ async function* reconnectWithParallelGapFill<T>(
   };
 
   try {
-    // 1. Drain gap-fill (silently no-op on cursor==undefined or fetch failure).
+    // 1. Drain gap-fill. Errors propagate to the outer reconnect loop so that
+    //    `onError` (token invalidation) and `shouldStop` (platform_disabled)
+    //    fire on gap-fill failures, not just live-stream failures. The
+    //    `finally` below tears down the live stream that was opened in
+    //    parallel; any events it buffered will be re-delivered via gap-fill
+    //    on the next reconnect.
     const cursor = getCursor();
     if (cursor) {
-      try {
-        const missed = await fetchMissed(cursor);
-        for (const event of missed) {
-          markReceived();
-          yield event;
-        }
-      } catch {
-        // Gap-fill failed — fall through to live.
+      const missed = await fetchMissed(cursor);
+      for (const event of missed) {
+        markReceived();
+        yield event;
       }
     }
 

@@ -12,7 +12,11 @@ export {
   context,
   divider,
   header,
+  image,
+  input,
+  richText,
   section,
+  video,
 } from "./builders/blockkit";
 // Builders — content
 export { attachments, blocks, reaction, text } from "./builders/content";
