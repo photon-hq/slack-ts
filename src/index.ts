@@ -69,6 +69,10 @@ export type {
   SlashCommandEvent,
 } from "./types/events";
 export type {
+  FileContentHeader,
+  GetContentBufferResult,
+  GetContentOptions,
+  GetContentResult,
   GetUrlResult,
   UploadOptions,
   UploadResult,
