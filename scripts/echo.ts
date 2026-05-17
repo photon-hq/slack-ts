@@ -1,46 +1,42 @@
 #!/usr/bin/env bun
 
 /**
- * Echo bot: subscribes to events for the first installed team and replies
+ * Echo bot: subscribes to events for one installed team and replies
  * in-thread to every plain user message with the same text.
  *
  * Usage:
- *   SPECTRUM_CLOUD_ENDPOINT=http://localhost:3000 \
  *   SPECTRUM_SLACK_ENDPOINT=localhost:50051 \
  *   bun run scripts/echo.ts
  *
- * Then enter your projectId + projectSecret at the prompt.
+ * Then enter your team_id, bot user id, and JWT at the prompt.
  */
 
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { createClient, text } from "../src/index";
+import { createClient, staticTokens, text } from "../src/index";
 
 const rl = createInterface({ input: stdin, output: stdout });
-const projectId = (await rl.question("projectId: ")).trim();
-const projectSecret = (await rl.question("projectSecret: ")).trim();
+const teamId = (await rl.question("teamId (T...): ")).trim();
+const botUserId = (await rl.question("botUserId (U...): ")).trim();
+const token = (await rl.question("token (eyJ...): ")).trim();
 rl.close();
 
 const client = createClient({
-  projectId,
-  projectSecret,
-  spectrumCloudEndpoint: process.env.SPECTRUM_CLOUD_ENDPOINT,
+  tokenProvider: staticTokens({
+    tokens: { [teamId]: token },
+    teams: {
+      [teamId]: {
+        teamName: teamId,
+        botUserId,
+        appId: "",
+        grantedScopes: [],
+      },
+    },
+  }),
   spectrumSlackEndpoint: process.env.SPECTRUM_SLACK_ENDPOINT,
 });
 
-const teams = await client.teams();
-const first = [...teams.entries()][0];
-if (!first) {
-  console.error("[echo] no installations for this project");
-  await client.close();
-  process.exit(1);
-}
-const [teamId, meta] = first;
-// botUserId lets us drop our own echoes so we don't loop on ourselves.
-const botUserId = meta.botUserId;
-console.log(
-  `[echo] team_id=${teamId} (${meta.teamName}) bot=${botUserId} — listening...`
-);
+console.log(`[echo] team_id=${teamId} bot=${botUserId} — listening...`);
 
 const abort = new AbortController();
 process.on("SIGINT", () => {
@@ -78,7 +74,7 @@ async function handleMessage(ev: {
   const { user, channel, ts, threadTs, subtype } = ev.message;
   const body = ev.message.text;
 
-  if (subtype) {
+  if (subtype && subtype !== "file_share") {
     return;
   }
   if (user === botUserId) {

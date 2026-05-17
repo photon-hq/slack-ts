@@ -2,8 +2,9 @@
 
 TypeScript SDK for Slack, via [Spectrum](https://github.com/photon-ai).
 
-This is a thin client over the `spectrum-slack` gRPC runtime. It also handles
-JWT minting against `spectrum-cloud` so you don't have to.
+This is a thin client over the `spectrum-slack` gRPC runtime. You provide
+the JWTs (one per workspace); the SDK handles transport, retries, and
+event streaming.
 
 ## Install
 
@@ -14,18 +15,28 @@ bun add @photon-ai/slack
 ## Quick start
 
 ```ts
-import { createClient, text, blocks, section, divider } from "@photon-ai/slack";
+import {
+  createClient,
+  staticTokens,
+  text,
+  blocks,
+  section,
+  divider,
+} from "@photon-ai/slack";
 
 const client = createClient({
-  projectId: process.env.PROJECT_ID!,
-  projectSecret: process.env.PROJECT_SECRET!,
+  tokenProvider: staticTokens({
+    tokens: { T012ABCDE: process.env.SLACK_JWT! },
+    teams: {
+      T012ABCDE: {
+        teamName: "Acme",
+        botUserId: "U-BOT",
+        appId: "A-APP",
+        grantedScopes: ["chat:write"],
+      },
+    },
+  }),
 });
-
-// Discover installed workspaces.
-const teams = await client.teams();
-for (const [teamId, meta] of teams) {
-  console.log(teamId, meta.teamName);
-}
 
 // Pick a team and act on it.
 const team = client.team("T012ABCDE");
@@ -94,8 +105,7 @@ To survive process restarts, plug in a persistent cursor store:
 
 ```ts
 const client = createClient({
-  projectId,
-  projectSecret,
+  tokenProvider: staticTokens({ tokens, teams }),
   cursorStore: {
     async get(teamId) {
       return await redis.get(`slack:cursor:${teamId}`) ?? undefined;
@@ -154,11 +164,13 @@ Feature-gated RPCs today: `files.upload` / `files.getUrl` (feature `files`),
 reactions via `messages.send({ reaction })` (feature `reactions`), and
 `messages.markRead` (feature `read-tracking`).
 
-## Custom token provider
+## Token providers
 
-The SDK ships with `SpectrumCloudTokenProvider` (default, used when you pass
-`projectId`/`projectSecret`). For tests or BYO setups, implement
-`TokenProvider` directly:
+`createClient` requires a `tokenProvider` — the SDK consumes JWTs through
+the `TokenProvider` contract and stays agnostic about where they come from.
+`staticTokens` ships in the box: a fixed `team_id → JWT` map plus team
+metadata. Mint or refresh tokens however you like out-of-band, then plug
+the result into `staticTokens` (or implement `TokenProvider` directly).
 
 ```ts
 import { createClient, staticTokens } from "@photon-ai/slack";
@@ -182,11 +194,10 @@ const client = createClient({
 
 | Env var | Default |
 |---|---|
-| `SPECTRUM_SLACK_ENDPOINT` | `slack-grpc.spectrum.photon.codes:443` |
-| `SPECTRUM_CLOUD_ENDPOINT` | `https://cloud.spectrum.photon.codes` (overridable via `spectrumCloudEndpoint` option) |
+| `SPECTRUM_SLACK_ENDPOINT` | `slack-grpc.spectrum.photon.codes:443` (overridable via the `spectrumSlackEndpoint` option on `createClient`) |
 
-For local dev, set both to `localhost:50051` and `http://localhost:3000`
-respectively — the SDK uses insecure gRPC for `localhost:` addresses.
+For local dev, set it to `localhost:50051` — the SDK uses insecure gRPC
+for `localhost:` addresses.
 
 ## Development
 

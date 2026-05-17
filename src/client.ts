@@ -1,5 +1,4 @@
-import { SpectrumCloudTokenProvider } from "./auth/spectrum-cloud-token-provider";
-import type { TeamMetadata, TokenProvider } from "./auth/token-provider";
+import type { TeamMetadata } from "./auth/token-provider";
 import { EventsResource } from "./resources/events";
 import { FilesResource } from "./resources/files";
 import { MessagesResource } from "./resources/messages";
@@ -26,14 +25,7 @@ export interface TeamClient {
 }
 
 export function createClient(options: ClientOptions): SlackClient {
-  const tokenProvider: TokenProvider =
-    "tokenProvider" in options
-      ? options.tokenProvider
-      : new SpectrumCloudTokenProvider({
-          projectId: options.projectId,
-          projectSecret: options.projectSecret,
-          endpoint: options.spectrumCloudEndpoint,
-        });
+  const { tokenProvider } = options;
 
   const channel = createSlackChannel({
     endpoint: options.spectrumSlackEndpoint,
@@ -75,9 +67,6 @@ export function createClient(options: ClientOptions): SlackClient {
   };
 
   const close = async (): Promise<void> => {
-    if (tokenProvider instanceof SpectrumCloudTokenProvider) {
-      tokenProvider.close();
-    }
     channel.close();
   };
 

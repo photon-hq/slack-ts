@@ -1,46 +1,30 @@
 #!/usr/bin/env bun
 
 /**
- * Subscribe to live events for the first available team.
+ * Subscribe to live events for one team.
  *
  * Usage:
- *   SPECTRUM_CLOUD_ENDPOINT=http://localhost:3000 \
  *   SPECTRUM_SLACK_ENDPOINT=localhost:50051 \
  *   bun run scripts/subscribe.ts
  *
- * Then enter your projectId + projectSecret at the prompt.
+ * Then enter your team_id and JWT at the prompt.
  */
 
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { createClient } from "../src/index";
+import { createClient, staticTokens } from "../src/index";
 
 const rl = createInterface({ input: stdin, output: stdout });
-const projectId = (await rl.question("projectId: ")).trim();
-const projectSecret = (await rl.question("projectSecret: ")).trim();
+const teamId = (await rl.question("teamId (T...): ")).trim();
+const token = (await rl.question("token (eyJ...): ")).trim();
 rl.close();
 
 const client = createClient({
-  projectId,
-  projectSecret,
-  spectrumCloudEndpoint: process.env.SPECTRUM_CLOUD_ENDPOINT,
+  tokenProvider: staticTokens({ tokens: { [teamId]: token } }),
   spectrumSlackEndpoint: process.env.SPECTRUM_SLACK_ENDPOINT,
 });
 
-const teams = await client.teams();
-const teamIds = [...teams.keys()];
-if (teamIds.length === 0) {
-  console.error("[subscribe] no installations for this project");
-  await client.close();
-  process.exit(1);
-}
-
-const teamId = teamIds[0];
-if (!teamId) {
-  process.exit(1);
-}
-const meta = teams.get(teamId);
-console.log(`[subscribe] using team_id=${teamId} (${meta?.teamName ?? ""})`);
+console.log(`[subscribe] using team_id=${teamId}`);
 
 const abort = new AbortController();
 process.on("SIGINT", () => {

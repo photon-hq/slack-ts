@@ -1,11 +1,9 @@
 /**
- * Low-level credential abstraction.
+ * Credential abstraction consumed by `createClient`.
  *
- * `slack-ts` consumes JWTs minted by spectrum-cloud's `/projects/:id/slack/tokens`
- * endpoint. Most callers don't need to think about this — they pass
- * `{ projectId, projectSecret }` to `createClient` and the SDK installs a
- * `SpectrumCloudTokenProvider` internally. Implement this interface directly
- * if you want to plug in your own token source (tests, BYO, custom auth).
+ * The SDK takes JWTs from any `TokenProvider`. `staticTokens` (a fixed
+ * `team_id → JWT` map) ships in the box. Implement this interface directly
+ * to plug in a different token source.
  */
 
 export interface TokenProvider {

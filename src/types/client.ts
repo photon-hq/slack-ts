@@ -2,12 +2,7 @@ import type { TokenProvider } from "../auth/token-provider";
 import type { RetryOptions } from "./common";
 import type { CursorStore } from "./cursor-store";
 
-export interface SlackCredentials {
-  readonly projectId: string;
-  readonly projectSecret: string;
-}
-
-interface SharedOptions {
+export interface ClientOptions {
   /** Persistent cursor storage. Default is in-memory. */
   readonly cursorStore?: CursorStore;
   /**
@@ -17,21 +12,16 @@ interface SharedOptions {
    * until the server opts in.
    */
   readonly retry?: boolean | RetryOptions;
-  /** Override the spectrum-cloud REST endpoint (e.g. for local dev). */
-  readonly spectrumCloudEndpoint?: string;
   /** Override the spectrum-slack gRPC endpoint (e.g. for local dev). */
   readonly spectrumSlackEndpoint?: string;
   /** Default timeout in milliseconds for unary RPC calls. */
   readonly timeout?: number;
+  /**
+   * Token source the SDK uses to resolve per-team JWTs. Use
+   * `staticTokens({...})` or implement `TokenProvider` directly.
+   */
+  readonly tokenProvider: TokenProvider;
 }
-
-/**
- * Either high-level (`projectId` + `projectSecret`, SDK manages JWT minting
- * against spectrum-cloud) or low-level (caller supplies a `tokenProvider`).
- */
-export type ClientOptions =
-  | (SlackCredentials & SharedOptions)
-  | ({ readonly tokenProvider: TokenProvider } & SharedOptions);
 
 export interface RequestOptions {
   /** Abort signal for cancelling the request. */

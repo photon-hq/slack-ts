@@ -4,7 +4,7 @@
  * End-to-end exerciser for the entire @photon-ai/slack public surface.
  *
  * Walks through every feature re-exported from `src/index.ts`:
- *   - createClient (high-level + custom tokenProvider)
+ *   - createClient with staticTokens
  *   - teams() discovery, team() per-team caching
  *   - messages.send for all four content variants
  *   - thread replies + replyBroadcast
@@ -15,17 +15,16 @@
  *   - events.subscribe + TypedEventStream operators (.take / .filter / .map / .on)
  *   - reconnect options + custom CursorStore
  *   - events.fetchMissed
- *   - staticTokens TokenProvider + await using lifecycle
+ *   - await using lifecycle
  *
  * Usage:
- *   SPECTRUM_CLOUD_ENDPOINT=http://localhost:3000 \
  *   SPECTRUM_SLACK_ENDPOINT=localhost:50051 \
  *   bun run scripts/example.ts
  *
- * The script prompts for projectId, projectSecret, teamId, and a test
- * channel id (`C…`) where the bot has been invited. Each section logs
- * what it is about to do and catches its own errors so a single failure
- * does not abort the rest of the smoke test.
+ * The script prompts for teamId, botUserId, JWT, and a test channel
+ * id (`C…`) where the bot has been invited. Each section logs what it
+ * is about to do and catches its own errors so a single failure does
+ * not abort the rest of the smoke test.
  */
 
 import { Buffer } from "node:buffer";
@@ -108,9 +107,9 @@ const formatErrorClass = (err: unknown): string =>
 // ---------------------------------------------------------------------------
 
 const rl = createInterface({ input: stdin, output: stdout });
-const projectId = (await rl.question("projectId: ")).trim();
-const projectSecret = (await rl.question("projectSecret: ")).trim();
 const teamId = (await rl.question("teamId (T...): ")).trim();
+const botUserId = (await rl.question("botUserId (U...): ")).trim();
+const token = (await rl.question("token (eyJ...): ")).trim();
 const channel = (await rl.question("channel (C...): ")).trim();
 const skipStreamingRaw = (
   await rl.question("skip streaming sections? [y/N]: ")
@@ -119,20 +118,28 @@ rl.close();
 
 const skipStreaming = skipStreamingRaw.toLowerCase().startsWith("y");
 
+const teamMeta = {
+  teamName: teamId,
+  botUserId,
+  appId: "",
+  grantedScopes: [],
+};
+
 // ---------------------------------------------------------------------------
-// Section 1 — Client construction (high-level path)
+// Section 1 — Client construction (staticTokens)
 // ---------------------------------------------------------------------------
 
-log("\n=== 1. createClient (high-level) ===");
+log("\n=== 1. createClient (staticTokens) ===");
 const client = createClient({
-  projectId,
-  projectSecret,
-  spectrumCloudEndpoint: process.env.SPECTRUM_CLOUD_ENDPOINT,
+  tokenProvider: staticTokens({
+    tokens: { [teamId]: token },
+    teams: { [teamId]: teamMeta },
+  }),
   spectrumSlackEndpoint: process.env.SPECTRUM_SLACK_ENDPOINT,
   timeout: DEFAULT_TIMEOUT_MS,
   retry: true,
 });
-log("created high-level SlackClient via projectId + projectSecret");
+log("created SlackClient via staticTokens");
 
 // State shared between sections.
 let postedTs: string | undefined;
@@ -480,9 +487,10 @@ try {
     await runSection("12. custom CursorStore (instrumented)", async () => {
       const instrumented = makeLoggingCursorStore();
       const client12 = createClient({
-        projectId,
-        projectSecret,
-        spectrumCloudEndpoint: process.env.SPECTRUM_CLOUD_ENDPOINT,
+        tokenProvider: staticTokens({
+          tokens: { [teamId]: token },
+          teams: { [teamId]: teamMeta },
+        }),
         spectrumSlackEndpoint: process.env.SPECTRUM_SLACK_ENDPOINT,
         cursorStore: instrumented,
       });

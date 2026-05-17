@@ -1,7 +1,5 @@
 // biome-ignore-all lint/performance/noBarrelFile: intentional public API surface
-export type { SpectrumCloudTokenProviderOptions } from "./auth/spectrum-cloud-token-provider";
 // Auth
-export { SpectrumCloudTokenProvider } from "./auth/spectrum-cloud-token-provider";
 export type { StaticTokensOptions } from "./auth/static-token-provider";
 export { staticTokens } from "./auth/static-token-provider";
 export type { TeamMetadata, TokenProvider } from "./auth/token-provider";
@@ -44,11 +42,7 @@ export type { MessagesResource } from "./resources/messages";
 export { TypedEventStream } from "./streaming/event-stream";
 
 // Types
-export type {
-  ClientOptions,
-  RequestOptions,
-  SlackCredentials,
-} from "./types/client";
+export type { ClientOptions, RequestOptions } from "./types/client";
 export type {
   FetchMissedOptions,
   FetchMissedResult,
