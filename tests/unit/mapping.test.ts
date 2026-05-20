@@ -85,6 +85,7 @@ describe("mapEvent", () => {
           user: "U1",
           text: "hi",
           ts: "111",
+          isFromMe: false,
           files: [],
         },
       }),
@@ -101,40 +102,75 @@ describe("mapEvent", () => {
         ts: "111",
         threadTs: undefined,
         subtype: undefined,
+        isFromMe: false,
         files: [],
       },
     });
   });
 
-  it("maps reaction variant", () => {
+  it("propagates isFromMe on message", () => {
+    const r = mapEvent(
+      asProto({
+        cursor: { opaque: "abc" },
+        message: {
+          channel: "C1",
+          user: "UBOT",
+          text: "self echo",
+          ts: "111",
+          isFromMe: true,
+          files: [],
+        },
+      }),
+      "T1"
+    );
+    expect(r?.type).toBe("message");
+    if (r?.type === "message") {
+      expect(r.message.isFromMe).toBe(true);
+    }
+  });
+
+  it("maps reaction variant and propagates isFromMe", () => {
     const r = mapEvent(
       asProto({
         cursor: { opaque: "abc" },
         reaction: {
-          user: "U1",
+          user: "UBOT",
           itemChannel: "C1",
           itemTs: "111",
           name: "thumbsup",
           removed: false,
+          isFromMe: true,
         },
       }),
       "T1"
     );
     expect(r?.type).toBe("reaction");
+    if (r?.type === "reaction") {
+      expect(r.reaction.isFromMe).toBe(true);
+    }
   });
 
-  it("maps mention variant", () => {
+  it("maps mention variant and propagates isFromMe", () => {
     const r = mapEvent(
       asProto({
         cursor: { opaque: "abc" },
-        mention: { channel: "C1", user: "U1", text: "<@bot>", ts: "111" },
+        mention: {
+          channel: "C1",
+          user: "UBOT",
+          text: "<@UBOT>",
+          ts: "111",
+          isFromMe: true,
+        },
       }),
       "T1"
     );
     expect(r?.type).toBe("mention");
+    if (r?.type === "mention") {
+      expect(r.mention.isFromMe).toBe(true);
+    }
   });
 
-  it("parses interactive raw_payload_json", () => {
+  it("parses interactive raw_payload_json and propagates isFromMe", () => {
     const payload = { action: { value: "yes" } };
     const r = mapEvent(
       asProto({
@@ -142,6 +178,7 @@ describe("mapEvent", () => {
         interactive: {
           type: "block_actions",
           user: "U1",
+          isFromMe: false,
           rawPayloadJson: JSON.stringify(payload),
         },
       }),
@@ -151,6 +188,30 @@ describe("mapEvent", () => {
     if (r?.type === "interactive") {
       expect(r.interactive.rawPayload).toEqual(payload);
       expect(r.interactive.rawPayloadJson).toBe(JSON.stringify(payload));
+      expect(r.interactive.isFromMe).toBe(false);
+    }
+  });
+
+  it("maps command variant and propagates isFromMe", () => {
+    const r = mapEvent(
+      asProto({
+        cursor: { opaque: "abc" },
+        command: {
+          command: "/spectrum",
+          text: "hello",
+          user: "U1",
+          channel: "C1",
+          responseUrl: "https://hooks.slack.com/...",
+          triggerId: "tid",
+          isFromMe: false,
+        },
+      }),
+      "T1"
+    );
+    expect(r?.type).toBe("command");
+    if (r?.type === "command") {
+      expect(r.command.isFromMe).toBe(false);
+      expect(r.command.command).toBe("/spectrum");
     }
   });
 

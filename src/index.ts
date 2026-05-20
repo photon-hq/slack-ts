@@ -71,4 +71,5 @@ export type {
   UploadOptions,
   UploadResult,
 } from "./types/files";
+export type { WhoAmIResult } from "./types/identity";
 export type { SendMessageParams, SendMessageResult } from "./types/messages";

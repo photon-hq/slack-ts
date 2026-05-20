@@ -157,6 +157,7 @@ function mapInboundMessage(proto: ProtoInboundMessage): InboundMessage {
     ts: proto.ts,
     threadTs: proto.threadTs,
     subtype: proto.subtype,
+    isFromMe: proto.isFromMe,
     files: proto.files.map(mapFile),
   };
 }
@@ -168,6 +169,7 @@ function mapReaction(proto: ProtoReaction): ReactionEvent {
     itemTs: proto.itemTs,
     name: proto.name,
     removed: proto.removed,
+    isFromMe: proto.isFromMe,
   };
 }
 
@@ -177,6 +179,7 @@ function mapMention(proto: ProtoAppMention): AppMentionEvent {
     user: proto.user,
     text: proto.text,
     ts: proto.ts,
+    isFromMe: proto.isFromMe,
   };
 }
 
@@ -192,6 +195,7 @@ function mapInteractive(
   return {
     type: proto.type,
     user: proto.user,
+    isFromMe: proto.isFromMe,
     rawPayloadJson: proto.rawPayloadJson,
     rawPayload: parsed,
   };
@@ -205,6 +209,7 @@ function mapCommand(proto: ProtoSlashCommand): SlashCommandEvent {
     channel: proto.channel,
     responseUrl: proto.responseUrl,
     triggerId: proto.triggerId,
+    isFromMe: proto.isFromMe,
   };
 }
 

@@ -2,6 +2,7 @@ import { fromGrpcError } from "../errors/error-handler";
 import type { MessageServiceClient } from "../transport/grpc-client";
 import { mapSendParams } from "../transport/mapper";
 import type { RequestOptions } from "../types/client";
+import type { WhoAmIResult } from "../types/identity";
 import type { SendMessageParams, SendMessageResult } from "../types/messages";
 
 export class MessagesResource {
@@ -41,6 +42,22 @@ export class MessagesResource {
         { channel: params.channel, ts: params.ts },
         { signal: options?.signal }
       );
+    } catch (err) {
+      throw fromGrpcError(err);
+    }
+  }
+
+  /**
+   * Return the bot identity for the authenticated `(project, team)`. Backed
+   * by the server-side installation cache — no Slack round-trip. Useful when
+   * an app needs its own `bot_user_id` / `app_id` for purposes other than
+   * self-echo filtering (which is already handled server-side via
+   * `event.message.isFromMe` and friends).
+   */
+  async whoAmI(options?: RequestOptions): Promise<WhoAmIResult> {
+    try {
+      const r = await this._client.whoAmI({}, { signal: options?.signal });
+      return { botUserId: r.botUserId, teamId: r.teamId, appId: r.appId };
     } catch (err) {
       throw fromGrpcError(err);
     }

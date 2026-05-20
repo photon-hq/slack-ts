@@ -23,6 +23,8 @@ export interface SlackFile {
 export interface InboundMessage {
   readonly channel: string;
   readonly files: readonly SlackFile[];
+  /** `true` when `user` is this installation's bot user id (server-stamped). */
+  readonly isFromMe: boolean;
   readonly subtype?: string;
   readonly text: string;
   readonly threadTs?: string;
@@ -31,6 +33,8 @@ export interface InboundMessage {
 }
 
 export interface ReactionEvent {
+  /** `true` when the reactor is this installation's bot user id (server-stamped). */
+  readonly isFromMe: boolean;
   readonly itemChannel: string;
   readonly itemTs: string;
   /** The Slack reaction name (no surrounding colons). */
@@ -42,12 +46,20 @@ export interface ReactionEvent {
 
 export interface AppMentionEvent {
   readonly channel: string;
+  /** `true` when `user` is this installation's bot user id (server-stamped). */
+  readonly isFromMe: boolean;
   readonly text: string;
   readonly ts: string;
   readonly user: string;
 }
 
 export interface InteractiveCallbackEvent {
+  /**
+   * `true` when the actor is this installation's bot user id. Almost always
+   * `false` — Slack doesn't deliver bot-originated interactives — present
+   * for symmetry with other inbound events.
+   */
+  readonly isFromMe: boolean;
   /** `rawPayloadJson` already parsed for convenience. */
   readonly rawPayload: unknown;
   /** Raw JSON payload as Slack delivered it. */
@@ -60,6 +72,11 @@ export interface InteractiveCallbackEvent {
 export interface SlashCommandEvent {
   readonly channel: string;
   readonly command: string;
+  /**
+   * `true` when the invoker is this installation's bot user id. Almost
+   * always `false` — slash commands are user-driven — present for symmetry.
+   */
+  readonly isFromMe: boolean;
   readonly responseUrl: string;
   readonly text: string;
   readonly triggerId: string;
