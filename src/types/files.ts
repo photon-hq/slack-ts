@@ -13,8 +13,23 @@ export interface UploadOptions {
   readonly threadTs?: string;
 }
 
+export interface FileShare {
+  /** Channel id the file was shared into. */
+  readonly channel: string;
+  /** `ts` of the share message Slack created in `channel`. Use it (with
+   *  `channel`) for `reactions.add`, `chat.postMessage` `thread_ts`,
+   *  `chat.update`, `chat.delete`, `conversations.replies` — anything
+   *  keyed on `(channel, ts)`. */
+  readonly ts: string;
+}
+
 export interface UploadResult {
   readonly file: SlackFile;
+  /** Per-channel share messages created by this upload — one entry per
+   *  channel id passed in `upload({ channel })` (which accepts a
+   *  comma-separated list). Empty when talking to an older backend that
+   *  doesn't yet populate the field. */
+  readonly shares: readonly FileShare[];
 }
 
 export interface GetUrlResult {

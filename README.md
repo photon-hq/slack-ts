@@ -120,13 +120,28 @@ const client = createClient({
 ## Upload a file
 
 ```ts
-await client.team("T012ABCDE").files.upload({
+const { file, shares } = await client.team("T012ABCDE").files.upload({
   channel: "C012XYZ",
   filename: "report.pdf",
   mimeType: "application/pdf",
   content: await fs.readFile("./report.pdf"),
   initialComment: "Here's the report",
 });
+
+// `shares` has one entry per channel id passed in `channel` — use
+// (channel, ts) to react/reply/edit/delete the share message Slack
+// created when the file was posted.
+const share = shares[0];
+if (share) {
+  await client.team("T012ABCDE").messages.send({
+    channel: share.channel,
+    reaction: {
+      emoji: "thumbsup",
+      itemTs: share.ts,
+      itemChannel: share.channel,
+    },
+  });
+}
 ```
 
 ## Errors
