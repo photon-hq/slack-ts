@@ -43,6 +43,7 @@
     "ts-proto": "^2.11.6",
     "tsdown": "^0.22.0",
     "typescript": "^5.7.0",
-    "ultracite": "7.5.8"
+    "ultracite": "7.5.8",
+    "unrun": "^0.3.0"
   }
 }
