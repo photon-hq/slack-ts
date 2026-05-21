@@ -13,6 +13,7 @@ import type {
   Reaction as ProtoReaction,
   SlashCommand as ProtoSlashCommand,
 } from "../generated/photon/slack/v1/common";
+import type { FileShare as ProtoFileShare } from "../generated/photon/slack/v1/file_service";
 import type {
   SendMessageRequest as ProtoSendMessageRequest,
   SubscribeEventsResponse as ProtoSubscribeEventsResponse,
@@ -26,6 +27,7 @@ import type {
   SlackFile,
   SlashCommandEvent,
 } from "../types/events";
+import type { FileShare } from "../types/files";
 import type { SendMessageParams } from "../types/messages";
 
 // ---------------------------------------------------------------------------
@@ -220,5 +222,12 @@ export function mapFile(proto: ProtoFile): SlackFile {
     mimeType: proto.mimetype,
     size: Number(proto.size),
     urlPrivate: proto.urlPrivate,
+  };
+}
+
+export function mapFileShare(proto: ProtoFileShare): FileShare {
+  return {
+    channel: proto.channel,
+    ts: proto.ts,
   };
 }

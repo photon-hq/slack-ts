@@ -64,6 +64,7 @@ export type {
 } from "./types/events";
 export type {
   FileContentHeader,
+  FileShare,
   GetContentBufferResult,
   GetContentOptions,
   GetContentResult,

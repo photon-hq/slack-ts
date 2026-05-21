@@ -1,7 +1,7 @@
 import { fromGrpcError } from "../errors/error-handler";
 import { openContentStream } from "../streaming/file-content-stream";
 import type { FileServiceClient } from "../transport/grpc-client";
-import { mapFile } from "../transport/mapper";
+import { mapFile, mapFileShare } from "../transport/mapper";
 import type { RequestOptions } from "../types/client";
 import type {
   GetContentBufferResult,
@@ -41,7 +41,10 @@ export class FilesResource {
       if (!response.file) {
         throw new Error("upload response missing file metadata");
       }
-      return { file: mapFile(response.file) };
+      return {
+        file: mapFile(response.file),
+        shares: response.shares.map(mapFileShare),
+      };
     } catch (err) {
       throw fromGrpcError(err);
     }
