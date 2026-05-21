@@ -19,7 +19,8 @@
   },
   "scripts": {
     "proto:update": "git submodule update --init --remote --merge proto",
-    "generate": "PATH=./node_modules/.bin:$PATH buf generate proto",
+    "proto:init": "git submodule update --init proto",
+    "generate": "bun run proto:init && PATH=./node_modules/.bin:$PATH buf generate proto",
     "build": "bun run generate && tsdown",
     "check": "tsc --noEmit",
     "lint": "biome check .",
